@@ -178,8 +178,9 @@ const pad=n=>String(n).padStart(2,"0");
 // los meses de la tarjeta cierran el día 19: del 20 en adelante ya corre el mes siguiente
 const CIERRE=19;
 const now=new Date(), CAL_M=`${now.getFullYear()}-${pad(now.getMonth()+1)}`;
-const TODAY_M=now.getDate()>CIERRE?((k)=>{let[y,m]=k.split("-").map(Number);m++;if(m>12){m=1;y++;}return`${y}-${pad(m)}`;})(CAL_M):CAL_M;
-const INICIO="2026-11"; // meses anteriores al uso de la app se consideran pagados
+// el mes de la cuenta es el mes en que se paga: lo comprado hasta el 19 de noviembre se paga en diciembre
+const TODAY_M=((k,n)=>{let[y,m]=k.split("-").map(Number);m+=n;while(m>12){m-=12;y++;}return`${y}-${pad(m)}`;})(CAL_M,now.getDate()>CIERRE?2:1);
+const INICIO="2026-12"; // meses anteriores al uso de la app se consideran pagados
 const addM=(k,n)=>{let[y,m]=k.split("-").map(Number);m+=n;y+=Math.floor((m-1)/12);m=((m-1)%12+12)%12+1;return`${y}-${pad(m)}`;};
 const diffM=(a,b)=>{const[y1,m1]=a.split("-").map(Number),[y2,m2]=b.split("-").map(Number);return(y2-y1)*12+(m2-m1);};
 const mName=(k,o={month:"long",year:"numeric"})=>{const[y,m]=k.split("-").map(Number);const s=new Date(y,m-1,1).toLocaleDateString("es-CL",o).replace(".","");return s.charAt(0).toUpperCase()+s.slice(1);};
@@ -232,7 +233,7 @@ const parte=(e,pid)=>{const ps=e.personas||[];if(!ps.includes(pid))return 0;if(p
 const totPersona=(pid,m)=>sum(cuotasMes(m).filter(x=>(x.c.persona||"")===pid),x=>x.v)+sum(extrasMes(m),e=>parte(e,pid));
 // cupo usado: todas las cuotas desde este mes en adelante (lo que aún se le debe al banco)
 // cuotas que siguen ocupando cupo: las de meses posteriores al mes de facturación en curso
-function cupoUsado(){const per={};let t=0;for(const c of S.compras){const n=c.cuotas||1;for(let i=0;i<n;i++){const m=addM(c.primerMes,i);if(m<=TODAY_M)continue;const v=valor(c,m);if(v){t+=v;per[c.persona||""]=(per[c.persona||""]||0)+v;}}}return{t,per};}
+function cupoUsado(){const per={};let t=0;for(const c of S.compras){const n=c.cuotas||1;for(let i=0;i<n;i++){const m=addM(c.primerMes,i);if(m<TODAY_M)continue;const v=valor(c,m);if(v){t+=v;per[c.persona||""]=(per[c.persona||""]||0)+v;}}}return{t,per};}
 // cupo real: el disponible que informó el banco, menos las compras agregadas después de esa fecha
 function cupoReal(){const max=cupoMax(),cfg=cfgT(),est=cupoUsado();
   if(cfg.disponible==null)return{max,usado:est.t,disp:max-est.t,per:est.per,real:false};
@@ -249,7 +250,7 @@ function cupoHTML(){const {max,usado,disp,per,real,fecha,nuevas}=cupoReal();cons
 const idsTodos=()=>{const ids=personasOrd().map(p=>p.id);if(S.compras.some(c=>!S.personas.find(p=>p.id===c.persona)))ids.push("");return ids;};
 const totMes=m=>sum(idsTodos(),pid=>totPersona(pid,m));
 const pagado=(pid,m)=>{if(m<INICIO)return true;const d=S.pagos.find(p=>p.id===m);return!!(d&&d.p&&d.p[pid]);};
-function estado(c){const n=c.cuotas||1;let pag=0,falta=0;for(let i=0;i<n;i++){const m=addM(c.primerMes,i);const v=valor(c,m);if(!v){pag++;continue;}if(pagado(c.persona||"",m))pag++;else falta+=v;}return{n,pag,falta,ult:addM(c.primerMes,n-1),actual:Math.min(n,Math.max(0,nCuota(c,TODAY_M)))};}
+function estado(c){const n=c.cuotas||1;let pag=0,falta=0;for(let i=0;i<n;i++){const m=addM(c.primerMes,i);const v=valor(c,m);if(!v){pag++;continue;}if(m<TODAY_M||pagado(c.persona||"",m))pag++;else falta+=v;}return{n,pag,falta,ult:addM(c.primerMes,n-1),actual:Math.min(n,Math.max(0,nCuota(c,TODAY_M)))};}
 
 /* ---- render ---- */
 let rq=false;function changed(){if(!rq){rq=true;setTimeout(()=>{rq=false;render();},0);}}
@@ -272,13 +273,13 @@ function vMes(){
   const exF=S.filtro!==""?ex.filter(e=>(e.personas||[]).includes(S.filtro)):ex;
   return `
   ${!S.compras.length?`<div class="card" style="background:var(--butter);border-color:transparent"><h2>Carga tus datos</h2><p class="sub" style="margin:6px 0 12px">Toca el botón y elige el archivo de respaldo que te mandaron (termina en .json). Se hace una sola vez.</p><button class="btn pri" style="width:100%" data-act="restore">Cargar respaldo</button></div>`:""}
-  <div class="card hero"><div class="lab">Total de ${mName(m,{month:"long"})} · <span style="color:${m<TODAY_M?"var(--muted)":"var(--accent)"}">${m<TODAY_M?"Cerrado el "+CIERRE+" de "+mName(m,{month:"long"}).toLowerCase():m===TODAY_M?"Abierto · cierra el "+CIERRE+" de "+mName(m,{month:"long"}).toLowerCase():"Próximo"}</span></div><div class="big num">${money(total)}</div>
+  <div class="card hero"><div class="lab">Total de ${mName(m,{month:"long"})} · <span style="color:${m<TODAY_M?"var(--muted)":"var(--accent)"}">${m<TODAY_M?"Ya pagado · cerró el "+CIERRE+" de "+mName(addM(m,-1),{month:"long"}).toLowerCase():m===TODAY_M?"Vigente · cierra el "+CIERRE+" de "+mName(addM(m,-1),{month:"long"}).toLowerCase():"Próximo"}</span></div><div class="big num">${money(total)}</div>
     <div class="row"><span>${debe>0?"Falta que paguen "+money(debe):total?"Todos pagaron ✓":"Sin gastos este mes"}</span><span>${mName(addM(m,1),{month:"long"})}: ${money(sig)} en cuotas</span></div></div>
   ${cupoHTML()}
   ${S.personas.length?`<div class="people">${ids.map(id=>{const p=persona(id);const t=totPersona(id,m);const ok=pagado(id,m);
     return `<div class="pc" ${pcStyle(p)} data-f="${id}" aria-pressed="${S.filtro===id}" role="button" tabindex="0"><div class="nm"><span>${esc(p.nombre)}</span>${t?`<button class="chk ${ok?"on":""}" data-pay="${id}" aria-label="Marcar pago de ${esc(p.nombre)}">${ok?"Pagó ✓":"Pendiente"}</button>`:""}</div><div class="amt num">${money(t)}</div></div>`;}).join("")}</div>`:""}
   <div class="card">
-    <div class="sec"><h2>Cuotas del mes</h2>${S.filtro!==""?`<span class="filter">Solo ${esc(persona(S.filtro).nombre)} · <button data-f="${S.filtro}">ver todas</button></span>`:`<span class="sub">${cm.length} cuotas</span>`}</div>
+    <div class="sec"><h2>${m===TODAY_M?"Cuotas de este mes":m<TODAY_M?"Cuotas que se pagaron":"Cuotas que vienen"}</h2>${S.filtro!==""?`<span class="filter">Solo ${esc(persona(S.filtro).nombre)} · <button data-f="${S.filtro}">ver todas</button></span>`:`<span class="sub">${cm.length} cuotas</span>`}</div>
     ${items.length?`<div class="list">${items.map(({c,k,v})=>{const p=persona(c.persona);return`<div class="it" ${pcStyle(p)} data-ed="${c.id}"><span class="sw"></span><span class="t">${esc(c.nombre)}<small>${esc(p.nombre)} · ${money(c.total)}<span class="tag ${c.interes==="CI"?"ci":""}" title="${c.interes==="CI"?"Con interés":"Sin interés"}">${c.interes==="CI"?"C/I":"S/I"}</span></small></span><span class="m num">${money(v)}<small>${k} de ${c.cuotas}</small></span></div>`;}).join("")}</div>`:`<div class="empty">No hay cuotas este mes. Toca <b>+</b> para agregar un gasto.</div>`}
   </div>
   <div class="card">
