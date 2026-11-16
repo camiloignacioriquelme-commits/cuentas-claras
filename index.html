@@ -151,6 +151,7 @@ nav.tabs button[aria-selected="true"]{color:var(--accent);border-top-color:var(-
 .prow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(140px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:12px;font-weight:700;max-width:calc(100% - 32px)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.kde{display:flex;gap:6px;align-items:center}.kde .inp{min-width:0;flex:1;text-align:center;padding-left:4px;padding-right:4px}.kde span{color:var(--muted);font-weight:600}
 </style>
 </head>
 <body>
@@ -375,7 +376,7 @@ function formCompra(c){
     <div class="two"><div class="f"><span class="lb">Cuotas</span><div class="step"><button type="button" id="cMinus" aria-label="Menos cuotas">−</button><input id="cC" inputmode="numeric" value="${c.cuotas}" aria-label="Número de cuotas"><button type="button" id="cPlus" aria-label="Más cuotas">+</button></div></div>
       <div class="f"><span class="lb">Interés</span><div class="seg" id="cI"><button type="button" data-i="SI" aria-pressed="${c.interes!=="CI"}">S/I<small>Sin interés</small></button><button type="button" data-i="CI" aria-pressed="${c.interes==="CI"}">C/I<small>Con interés</small></button></div></div></div>
     <div class="two"><div class="f"><label for="cV">Valor cuota</label><input class="inp num" id="cV" inputmode="numeric" value="${fmtIn(c.valorCuota)}"></div>
-      <div class="f"><label for="cK">En ${mName(S.mes,{month:"long"})} va en la cuota</label><select class="inp" id="cK"></select></div></div>
+      <div class="f"><label for="cK">En ${mName(S.mes,{month:"long"})} va en la cuota</label><div class="kde"><input class="inp num" id="cK" inputmode="numeric" aria-label="Número de cuota"><span>de</span><input class="inp num" id="cKN" inputmode="numeric" aria-label="Total de cuotas"></div></div></div>
     <div class="calc num" id="cRes"></div><div class="err" id="cE"></div>
     <div class="btns">${nuevo?"":`<button class="btn del" id="cDel">Borrar</button>`}<button class="btn" id="cX">Cancelar</button><button class="btn pri" id="cS">Guardar</button></div>`,()=>{
     bindChips("#cP",false);
@@ -383,19 +384,19 @@ function formCompra(c){
     $$("#cI button").forEach(b=>b.onclick=()=>{interes=b.dataset.i;$$("#cI button").forEach(x=>x.setAttribute("aria-pressed",x===b));});
     const n=()=>Math.max(1,Math.min(48,parseInt($("#cC").value)||1));
     // siempre ofrece de la cuota 1 a la 12 (o más si hay más cuotas); elegir una mayor sube el total
-    const fillK=keep=>{const cur=keep||parseInt($("#cK").value)||1;const N=n();const L=Math.max(12,N);$("#cK").innerHTML=Array.from({length:L},(_,i)=>`<option value="${i+1}" ${i+1===Math.min(cur,L)?"selected":""}>${i+1} de ${Math.max(N,i+1)}</option>`).join("");};
+    const fillK=keep=>{if(keep)$("#cK").value=keep;$("#cKN").value=n();};
     const calc=()=>{const T=Math.abs(parseN($("#cT").value)),N=n();if(!manual)$("#cV").value=fmtIn(T/N);const V=Math.abs(parseN($("#cV").value));const K=parseInt($("#cK").value)||1;const pm=addM(S.mes,-(K-1));
       $("#cRes").innerHTML=T?`${N} cuota${N>1?"s":""} de <b>${money(V)}</b> · de ${mShort(pm)} a ${mShort(addM(pm,N-1))}${V*N-T>N?` · <span style="color:var(--debt)">pagas ${money(V*N-T)} de interés</span>`:""}`:"Escribe el monto para ver el resultado.";};
     fillK(k0);money$($("#cT"),calc);money$($("#cV"),()=>{manual=true;calc();});
-    const fitK=()=>fillK(Math.min(parseInt($("#cK").value)||1,n()));
+    const fitK=()=>{$("#cKN").value=n();};
     $("#cC").addEventListener("input",()=>{fitK();calc();});
     $("#cMinus").onclick=()=>{$("#cC").value=n()-1||1;fitK();calc();};$("#cPlus").onclick=()=>{$("#cC").value=Math.min(48,n()+1);fitK();calc();};
-    $("#cK").onchange=()=>{const K=parseInt($("#cK").value)||1;if(K>n()){$("#cC").value=K;fillK(K);}calc();};calc();
+    $("#cK").addEventListener("input",calc);$("#cKN").addEventListener("input",()=>{const v=parseInt($("#cKN").value);if(v>0)$("#cC").value=Math.min(48,v);calc();});calc();
     $("#cX").onclick=close;
     $("#cS").onclick=async()=>{const nombre=$("#cN").value.trim(),total=Math.abs(parseN($("#cT").value)),per=chosen("#cP")[0]||"";
       if(!nombre||!total){$("#cE").textContent="Escribe qué compraste y el monto.";return;}
       if(!per&&S.personas.length){$("#cE").textContent="Elige de quién es.";return;}
-      const K=parseInt($("#cK").value)||1,N=Math.max(n(),K);
+      const K=parseInt($("#cK").value)||1,N=n();if(K>N){$("#cE").textContent="La cuota no puede ser mayor que el total ("+K+" de "+N+").";return;}
       $("#cS").disabled=true;
       const pm=addM(S.mes,-(K-1));
       // conserva los valores exactos de meses ya registrados (Excel) si la compra no cambió de mes de inicio
