@@ -223,6 +223,8 @@ async function init(){
 function status(m){$("#status").textContent=m||(mode==="db"?"Guardado en la nube":mode==="local"?"Guardado en este celular":"Cargando…");}
 
 /* ---- cálculos ---- */
+const ordK=c=>{const k=String(c.creado||"");return(k.includes("T")?"1":"0")+k;};// lo agregado en la app (con hora) va antes que lo importado del Excel
+const nuevoPrimero=(a,b)=>ordK(b).localeCompare(ordK(a))||String(b.id).localeCompare(String(a.id),undefined,{numeric:true});
 const persona=id=>S.personas.find(p=>p.id===id)||{id:"",nombre:"Sin asignar",color:"#9CA3AF"};
 const personasOrd=()=>[...S.personas].sort((a,b)=>(a.orden??99)-(b.orden??99));
 const nCuota=(c,m)=>diffM(c.primerMes,m)+1;
@@ -269,7 +271,7 @@ function vMes(){
   const m=S.mes,cm=cuotasMes(m),ex=extrasMes(m),total=totMes(m),sig=totMes(addM(m,1));
   const ids=idsTodos().filter(id=>totPersona(id,m)!==0||S.filtro===id);
   const debe=sum(ids.filter(id=>!pagado(id,m)),id=>totPersona(id,m));
-  let items=cm.sort((a,b)=>(personasOrd().findIndex(p=>p.id===a.c.persona))-(personasOrd().findIndex(p=>p.id===b.c.persona))||b.v-a.v);
+  let items=cm.sort((a,b)=>nuevoPrimero(a.c,b.c));
   if(S.filtro!=="")items=items.filter(x=>(x.c.persona||"")===S.filtro);
   const exF=S.filtro!==""?ex.filter(e=>(e.personas||[]).includes(S.filtro)):ex;
   return `
@@ -291,7 +293,7 @@ function vMes(){
   <div class="links"><button data-act="personas">Personas y colores</button><button data-act="excel">Descargar Excel</button><button data-act="backup">Guardar respaldo</button><button data-act="restore">Cargar respaldo</button></div><input type="file" id="restoreFile" accept=".json,application/json" hidden>`;
 }
 function vDeudas(){
-  const act=S.compras.map(c=>({c,e:estado(c)})).filter(x=>x.e.falta>0).sort((a,b)=>b.e.falta-a.e.falta);
+  const act=S.compras.map(c=>({c,e:estado(c)})).filter(x=>x.e.falta>0).sort((a,b)=>nuevoPrimero(a.c,b.c));
   const total=sum(act,x=>x.e.falta);
   const ids=idsTodos().filter(id=>act.some(x=>(x.c.persona||"")===id));
   const libre=act.map(x=>x.e.ult).sort().pop();
@@ -299,7 +301,7 @@ function vDeudas(){
     <div class="row"><span>${act.length} productos con cuotas por pagar</span>${libre?`<span>Última cuota: ${mName(libre,{month:"short",year:"numeric"})}</span>`:""}</div></div>
   ${cupoHTML()}
   ${ids.length?`<div class="people">${ids.map(id=>{const p=persona(id);return`<div class="pc" ${pcStyle(p)} style="cursor:default"><div class="nm">${esc(p.nombre)}</div><div class="amt num">${money(sum(act.filter(x=>(x.c.persona||"")===id),x=>x.e.falta))}</div></div>`;}).join("")}</div>`:""}
-  <div class="card"><div class="sec"><h2>Cada producto</h2><span class="sub">Toca uno para editarlo</span></div>
+  <div class="card"><div class="sec"><h2>Cada producto</h2><span class="sub">Lo último agregado primero</span></div>
   ${act.length?act.map(({c,e})=>{const p=persona(c.persona);return`<div class="debtrow" ${pcStyle(p)} data-ed="${c.id}"><div class="hd"><b><span class="dot"></span>${esc(c.nombre)}</b><b class="num" style="color:var(--debt)">${money(e.falta)}</b></div>
     <div class="prog">${Array.from({length:Math.min(e.n,36)},(_,i)=>`<i class="${i<e.pag?"p":""}"></i>`).join("")}</div>
     <div class="meta"><span>${esc(p.nombre)} · ${e.pag} de ${e.n} pagadas · ${money(valor(c,addM(c.primerMes,c.cuotas-1))||c.valorCuota)} c/u <span class="tag ${c.interes==="CI"?"ci":""}">${c.interes==="CI"?"C/I":"S/I"}</span></span><span>hasta ${mShort(e.ult)}</span></div></div>`;}).join(""):`<div class="empty">No hay deudas pendientes 🎉</div>`}</div>`;
